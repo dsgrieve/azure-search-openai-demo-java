@@ -11,6 +11,7 @@ param location string
 
 param appServicePlanName string = ''
 param backendServiceName string = ''
+param frontendServiceName string = ''
 param resourceGroupName string = ''
 
 param applicationInsightsName string = ''
@@ -71,7 +72,13 @@ param useApplicationInsights bool = false
 
 var abbrs = loadJsonContent('abbreviations.json')
 var resourceToken = toLower(uniqueString(subscription().id, environmentName, location))
-var tags = { 'azd-env-name': environmentName }
+var tags = { 
+  'azd-env-name': environmentName 
+  assignedTo: 'dagrieve'
+  createdBy : 'dagrieve'
+  Description : 'Azure search OpenAI Java demo'
+  OkToDelete : 'true'
+}
 
 // Organize resources in a resource group
 resource resourceGroup 'Microsoft.Resources/resourceGroups@2021-04-01' = {
@@ -124,8 +131,28 @@ module appServicePlan 'core/host/appserviceplan.bicep' = {
 }
 
 // The application frontend
-module backend 'core/host/appservice.bicep' = {
+module frontend 'core/host/appservice.bicep' = {
   name: 'web'
+  scope: resourceGroup
+  dependsOn: [ backend ]
+  params: {
+    name: !empty(frontendServiceName) ? frontendServiceName : '${abbrs.webSitesAppService}frontend-${resourceToken}'
+    location: location
+    tags: union(tags, { 'azd-service-name': 'frontend' })
+    appServicePlanId: appServicePlan.outputs.id
+    runtimeName: 'node'
+    runtimeVersion: '18-lts'
+    scmDoBuildDuringDeployment: true
+    managedIdentity: true
+    appSettings: {
+      VITE_BACKEND_URI: backend.outputs.uri
+    }
+  }
+}
+
+// The application backend
+module backend 'core/host/appservice.bicep' = {
+  name: 'api'
   scope: resourceGroup
   params: {
     name: !empty(backendServiceName) ? backendServiceName : '${abbrs.webSitesAppService}backend-${resourceToken}'
